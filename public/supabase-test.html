@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Supabase Connection Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .success { color: #059669; }
+    .error { color: #dc2626; }
+    .warning { color: #d97706; }
+    pre {
+      background: #1f2937;
+      color: #f9fafb;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 5px 10px 0;
+    }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Supabase Connection Diagnostic</h1>
+
+  <div class="test-card">
+    <h2>Test Results</h2>
+    <div id="results">Click a test button below to start...</div>
+  </div>
+
+  <div class="test-card">
+    <h2>Quick Tests</h2>
+    <button onclick="testEnvVars()">Test Environment Variables</button>
+    <button onclick="testConnection()">Test Supabase Connection</button>
+    <button onclick="loadStories()">Load All Stories</button>
+    <button onclick="testInsert()">Test Insert Story</button>
+  </div>
+
+  <div class="test-card">
+    <h2>Story Data</h2>
+    <div id="stories">No stories loaded yet...</div>
+  </div>
+
+  <script type="module">
+    window.testEnvVars = function() {
+      const results = document.getElementById('results');
+
+      // Check if environment variables are available
+      const hasUrl = !!import.meta.env?.VITE_SUPABASE_URL;
+      const hasKey = !!import.meta.env?.VITE_SUPABASE_ANON_KEY;
+
+      results.innerHTML = `
+        <h3>Environment Variables Check</h3>
+        <p class="${hasUrl ? 'success' : 'error'}">
+          VITE_SUPABASE_URL: ${hasUrl ? '✅ Set (' + import.meta.env.VITE_SUPABASE_URL.substring(0, 30) + '...)' : '❌ Not set'}
+        </p>
+        <p class="${hasKey ? 'success' : 'error'}">
+          VITE_SUPABASE_ANON_KEY: ${hasKey ? '✅ Set (' + import.meta.env.VITE_SUPABASE_ANON_KEY.substring(0, 30) + '...)' : '❌ Not set'}
+        </p>
+        ${(!hasUrl || !hasKey) ? `
+          <p class="error">
+            <strong>ERROR:</strong> Supabase credentials not found in browser environment!<br>
+            Make sure .env file has VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.<br>
+            Restart the dev server after updating .env.
+          </p>
+        ` : ''}
+      `;
+    };
+
+    window.testConnection = async function() {
+      const results = document.getElementById('results');
+      results.innerHTML = '<p>Testing connection...</p>';
+
+      try {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+        const url = import.meta.env.VITE_SUPABASE_URL;
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!url || !key) {
+          throw new Error('Supabase credentials not found');
+        }
+
+        const supabase = createClient(url, key);
+
+        // Try a simple query
+        const { data, error } = await supabase
+          .from('citizen_stories')
+          .select('count')
+          .limit(1);
+
+        if (error) throw error;
+
+        results.innerHTML = `
+          <h3 class="success">✅ Connection Successful!</h3>
+          <p>Successfully connected to Supabase and queried citizen_stories table.</p>
+          <pre>${JSON.stringify({ url, keyLength: key.length }, null, 2)}</pre>
+        `;
+      } catch (err) {
+        results.innerHTML = `
+          <h3 class="error">❌ Connection Failed</h3>
+          <p><strong>Error:</strong> ${err.message}</p>
+          <pre>${err.stack || err.toString()}</pre>
+        `;
+      }
+    };
+
+    window.loadStories = async function() {
+      const results = document.getElementById('results');
+      const storiesDiv = document.getElementById('stories');
+      results.innerHTML = '<p>Loading stories from Supabase...</p>';
+
+      try {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+        const url = import.meta.env.VITE_SUPABASE_URL;
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        const supabase = createClient(url, key);
+
+        const { data, error } = await supabase
+          .from('citizen_stories')
+          .select('*')
+          .order('submitted_at', { ascending: false });
+
+        if (error) throw error;
+
+        results.innerHTML = `
+          <h3 class="success">✅ Loaded ${data.length} stories</h3>
+        `;
+
+        storiesDiv.innerHTML = data.map((story, i) => `
+          <div style="border-bottom: 1px solid #e5e7eb; padding: 10px 0;">
+            <strong>${i + 1}. ${story.headline}</strong><br>
+            <small>ID: ${story.id} | Area: ${story.policy_area} | ${new Date(story.submitted_at).toLocaleString()}</small><br>
+            <small>${story.location_city}, ${story.location_state} ${story.location_zip}</small>
+          </div>
+        `).join('');
+      } catch (err) {
+        results.innerHTML = `
+          <h3 class="error">❌ Failed to load stories</h3>
+          <p><strong>Error:</strong> ${err.message}</p>
+        `;
+      }
+    };
+
+    window.testInsert = async function() {
+      const results = document.getElementById('results');
+      results.innerHTML = '<p>Testing insert...</p>';
+
+      try {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+        const url = import.meta.env.VITE_SUPABASE_URL;
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        const supabase = createClient(url, key);
+
+        const testStory = {
+          id: 'TEST-' + Date.now(),
+          submitted_at: new Date().toISOString(),
+          location_zip: '28202',
+          location_city: 'Charlotte',
+          location_state: 'NC',
+          policy_area: 'infrastructure',
+          headline: 'Browser test story - ' + new Date().toLocaleTimeString(),
+          story: 'This is a test story submitted from the browser diagnostic tool.',
+          verification_status: 'pending',
+          verification_score: 0
+        };
+
+        const { data, error } = await supabase
+          .from('citizen_stories')
+          .insert([testStory])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        results.innerHTML = `
+          <h3 class="success">✅ Insert Successful!</h3>
+          <p>Test story was saved to Supabase.</p>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+
+        // Reload stories
+        setTimeout(loadStories, 500);
+      } catch (err) {
+        results.innerHTML = `
+          <h3 class="error">❌ Insert Failed</h3>
+          <p><strong>Error:</strong> ${err.message}</p>
+          <pre>${err.stack || err.toString()}</pre>
+        `;
+      }
+    };
+
+    // Auto-run environment check on load
+    window.addEventListener('load', () => {
+      testEnvVars();
+    });
+  </script>
+</body>
+</html>
