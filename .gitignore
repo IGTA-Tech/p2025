@@ -47,3 +47,4 @@ lerna-debug.log*
 
 # Server Files
 server.log
+config.bat
