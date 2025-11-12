@@ -1,6 +1,4 @@
 # Environment Variables - IMPORTANT: Never commit API keys
-.env
-.env.local
 .env.production.local
 .env.development.local
 .env.test.local
@@ -19,7 +17,6 @@ node_modules/
 
 # Misc
 .DS_Store
-.env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -47,3 +44,7 @@ lerna-debug.log*
 
 # Server Files
 server.log
+config.bat
+temp_auto_push.bat
+temp_interactive_push.bat
+branch_structure.json
