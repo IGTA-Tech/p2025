@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { getDemographicsByZip, verifyStoryDemographics } from './services/censusApi';
-import { generateCreativeBrief, generateResearchBrief } from './services/creativeBriefAI';
+import { generateCreativeBrief } from './services/creativeBriefAI';
 import { getStateEnergyData, verifyEnergyStory } from './services/eiaApi';
 import { getStateClimateData, verifyClimateStory } from './services/ncdcApi';
 import { getStateHousingData, verifyHousingStory } from './services/hudApi';
@@ -22,8 +22,6 @@ import { searchCandidates, searchCommittees, searchContributions, verifyCampaign
 import { submitStory, fetchStories, subscribeToStories } from './services/supabaseClient';
 import { analyzeStory } from './services/storyAnalyzer';
 import { verifyStory } from './services/storyVerification';
-import VideoGenerator from './components/VideoGenerator';
-import { generateVideoFromText, getVideoStatus, VideoStatus } from './services/videoGenerationAI';
 
 // Comprehensive data models for the platform
 const policyAreas = [
@@ -206,8 +204,8 @@ VOICEOVER: "When federal workers lose jobs, entire communities suffer."
   }
 ];
 
-const DemocraticAccountabilityPlatform = ({ initialView = 'citizen' }) => {
-  const [activeView, setActiveView] = useState(initialView);
+const DemocraticAccountabilityPlatform = () => {
+  const [activeView, setActiveView] = useState('citizen');
   const [selectedStory, setSelectedStory] = useState(null);
   const [selectedPolicyArea, setSelectedPolicyArea] = useState('all');
   const [clientTier, setClientTier] = useState('enterprise');
@@ -265,19 +263,7 @@ const DemocraticAccountabilityPlatform = ({ initialView = 'citizen' }) => {
   const [creativeBrief, setCreativeBrief] = useState(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [showBriefModal, setShowBriefModal] = useState(false);
-  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
-  const [researchBrief, setResearchBrief] = useState(null);
-  const [researchLoading, setResearchLoading] = useState(false);
-  const [showResearchModal, setShowResearchModal] = useState(false);
-
-  // Video generation state
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
-  const [videoTaskId, setVideoTaskId] = useState(null);
-  const [videoProgress, setVideoProgress] = useState(0);
-  const [generatedVideoUrl, setGeneratedVideoUrl] = useState(null);
-  const [videoError, setVideoError] = useState(null);
-  const [videoPrompt, setVideoPrompt] = useState(null);
-
+  
   // Real-time metrics simulation
   const [liveMetrics, setLiveMetrics] = useState({
     totalStories: 5847,
@@ -377,61 +363,20 @@ const DemocraticAccountabilityPlatform = ({ initialView = 'citizen' }) => {
   }, []); // Run once on mount
 
   const filteredStories = useMemo(() => {
-    return citizenStories
-      .filter(story => {
-        const matchesPolicy = selectedPolicyArea === 'all' || story.policyArea === selectedPolicyArea;
-        const matchesSearch = searchQuery === '' ||
-          story.headline.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          story.story.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          story.location.city.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesPolicy && matchesSearch;
-      })
-      .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
-  }, [citizenStories, selectedPolicyArea, searchQuery]);
+    return citizenStories.filter(story => {
+      const matchesPolicy = selectedPolicyArea === 'all' || story.policyArea === selectedPolicyArea;
+      const matchesSearch = searchQuery === '' ||
+        story.headline.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        story.story.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        story.location.city.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesPolicy && matchesSearch;
+    });
+  }, [selectedPolicyArea, searchQuery]);
 
   // Fetch Census, EIA, and NCDC data when a story is selected
   useEffect(() => {
     if (selectedStory) {
       const fetchVerificationData = async () => {
-        // Check if story needs AI analysis (missing or empty aiAnalysis)
-        const needsAiAnalysis = !selectedStory.aiAnalysis ||
-          (selectedStory.aiAnalysis.messageResonance === 0 &&
-           selectedStory.aiAnalysis.competitiveVulnerability === 'unknown' &&
-           (!selectedStory.aiAnalysis.demographicAppeal || selectedStory.aiAnalysis.demographicAppeal.length === 0));
-
-        if (needsAiAnalysis) {
-          setAiAnalysisLoading(true);
-          try {
-            console.log('Running AI analysis for story:', selectedStory.id);
-            const analysis = await analyzeStory(selectedStory);
-
-            // Update the selected story with analysis results
-            const updatedStory = {
-              ...selectedStory,
-              aiAnalysis: {
-                messageResonance: analysis.messageResonance,
-                demographicAppeal: analysis.demographicAppeal,
-                recommendedTalkingPoints: analysis.recommendedTalkingPoints,
-                competitiveVulnerability: analysis.competitiveVulnerability
-              }
-            };
-
-            // Update the story in the stories list
-            setCitizenStories(prev =>
-              prev.map(s => s.id === selectedStory.id ? updatedStory : s)
-            );
-
-            // Update selectedStory to trigger re-render
-            setSelectedStory(updatedStory);
-
-            console.log('AI analysis completed:', analysis.analysisMethod);
-          } catch (error) {
-            console.error('Failed to run AI analysis:', error);
-          } finally {
-            setAiAnalysisLoading(false);
-          }
-        }
-
         // Fetch Census data
         setCensusLoading(true);
         setCensusData(null);
@@ -609,31 +554,10 @@ const DemocraticAccountabilityPlatform = ({ initialView = 'citizen' }) => {
   };
 
   // Copy brief to clipboard
-  const copyBriefToClipboard = async () => {
+  const copyBriefToClipboard = () => {
     if (!creativeBrief) return;
-    try {
-      await navigator.clipboard.writeText(creativeBrief);
-      alert('Creative brief copied to clipboard!');
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      // Fallback method for older browsers or permission issues
-      try {
-        const textArea = document.createElement('textarea');
-        textArea.value = creativeBrief;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        alert('Creative brief copied to clipboard!');
-      } catch (fallbackError) {
-        console.error('Fallback copy also failed:', fallbackError);
-        alert('Failed to copy to clipboard. Please select and copy the text manually.');
-      }
-    }
+    navigator.clipboard.writeText(creativeBrief);
+    alert('Creative brief copied to clipboard!');
   };
 
   // Download brief as text file
@@ -645,167 +569,6 @@ const DemocraticAccountabilityPlatform = ({ initialView = 'citizen' }) => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `creative-brief-${selectedStory.id}-${new Date().toISOString().split('T')[0]}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Extract video prompt from creative brief - converts script to visual scene descriptions for Wan AI
-  const extractVideoPromptFromBrief = (brief, story) => {
-    const location = story.location || {};
-    const city = location.city || 'a community';
-    const state = location.state || '';
-    const policyArea = story.policyArea || 'policy';
-
-    // Map policy areas to visual themes
-    const policyVisuals = {
-      education: 'school building exterior, empty classroom with desks, children walking with backpacks, concerned parent at kitchen table',
-      healthcare: 'small town medical clinic, elderly patient in waiting room, pharmacy counter, ambulance on rural road',
-      employment: 'office building, worker carrying box of belongings, family at dinner table looking worried, job fair crowd',
-      housing: 'suburban neighborhood street, family home with for-sale sign, apartment building, moving truck',
-      environment: 'factory smokestacks, polluted waterway, community park, children playing outdoors',
-      immigration: 'diverse community gathering, local business storefronts, family portrait, neighborhood street scene',
-      infrastructure: 'crumbling bridge, pothole-filled road, construction site, traffic congestion',
-      justice: 'courthouse steps, community meeting hall, protest signs, town hall gathering'
-    };
-
-    const visualTheme = policyVisuals[policyArea] || 'community gathering, local neighborhood, concerned citizens, town meeting';
-
-    // Extract key emotional words from the headline
-    const headline = story.headline || '';
-
-    // Build a visual-focused prompt that Wan can render
-    let prompt = `Cinematic documentary-style video. Photorealistic, 4K quality, warm natural lighting.
-
-SCENE: ${city}${state ? `, ${state}` : ''} - American ${policyArea === 'healthcare' ? 'rural town' : policyArea === 'education' ? 'suburban neighborhood' : 'community'}.
-
-VISUAL SEQUENCE:
-- Opening wide shot: Establishing view of ${city} neighborhood at golden hour
-- ${visualTheme}
-- Close-up: Authentic facial expressions showing concern and determination
-- Community members in everyday settings, natural interactions
-
-MOOD: Documentary realism, emotional weight, hope mixed with urgency.
-CAMERA: Slow cinematic pans, steady tracking shots, intimate close-ups.
-COLOR GRADE: Warm earth tones, natural daylight, slight desaturation for documentary feel.
-STYLE: Ken Burns documentary aesthetic, authentic American community life.
-
-CONTEXT: This community is affected by ${policyArea} changes. "${headline.substring(0, 100)}"`;
-
-    console.log('Generated Wan video prompt:', prompt);
-    return prompt;
-  };
-
-  // Handle video generation from creative brief
-  const handleGenerateCommercial = async () => {
-    if (!creativeBrief || !selectedStory) return;
-
-    setIsGeneratingVideo(true);
-    setVideoError(null);
-    setGeneratedVideoUrl(null);
-    setVideoProgress(0);
-
-    try {
-      // Extract video prompt from the creative brief
-      const generatedPrompt = extractVideoPromptFromBrief(creativeBrief, selectedStory);
-      console.log('Generated video prompt:', generatedPrompt);
-      setVideoPrompt(generatedPrompt);
-
-      // Call the video generation API
-      const result = await generateVideoFromText({
-        prompt: generatedPrompt,
-        duration: 10, // 10 seconds for a sample commercial
-        resolution: '720p',
-        aspectRatio: '16:9',
-      });
-
-      setVideoTaskId(result.taskId);
-
-      // Start polling for completion
-      const pollForCompletion = async (taskId) => {
-        try {
-          const status = await getVideoStatus(taskId);
-          setVideoProgress(status.progress || 0);
-
-          if (status.status === VideoStatus.COMPLETED || status.status === 'completed') {
-            setGeneratedVideoUrl(status.videoUrl);
-            setIsGeneratingVideo(false);
-          } else if (status.status === VideoStatus.FAILED || status.status === 'failed') {
-            setVideoError(status.error || 'Video generation failed');
-            setIsGeneratingVideo(false);
-          } else {
-            // Continue polling
-            setTimeout(() => pollForCompletion(taskId), 5000);
-          }
-        } catch (err) {
-          setVideoError(err.message);
-          setIsGeneratingVideo(false);
-        }
-      };
-
-      // Start polling after a short delay
-      setTimeout(() => pollForCompletion(result.taskId), 3000);
-    } catch (error) {
-      console.error('Failed to generate commercial:', error);
-      setVideoError(error.message || 'Failed to generate commercial');
-      setIsGeneratingVideo(false);
-    }
-  };
-
-  // Handle research brief generation
-  const handleGenerateResearchBrief = async () => {
-    if (!selectedStory) return;
-
-    setResearchLoading(true);
-    try {
-      const brief = await generateResearchBrief(selectedStory, censusData, censusVerification, false);
-      setResearchBrief(brief);
-      setShowResearchModal(true);
-    } catch (error) {
-      console.error('Failed to generate research brief:', error);
-      alert('Failed to generate research brief. Please try again.');
-    } finally {
-      setResearchLoading(false);
-    }
-  };
-
-  // Copy research brief to clipboard
-  const copyResearchToClipboard = async () => {
-    if (!researchBrief) return;
-    try {
-      await navigator.clipboard.writeText(researchBrief);
-      alert('Research brief copied to clipboard!');
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      try {
-        const textArea = document.createElement('textarea');
-        textArea.value = researchBrief;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        alert('Research brief copied to clipboard!');
-      } catch (fallbackError) {
-        console.error('Fallback copy also failed:', fallbackError);
-        alert('Failed to copy to clipboard. Please select and copy the text manually.');
-      }
-    }
-  };
-
-  // Download research brief as text file
-  const downloadResearchBrief = () => {
-    if (!researchBrief || !selectedStory) return;
-
-    const blob = new Blob([researchBrief], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `research-brief-${selectedStory.id}-${new Date().toISOString().split('T')[0]}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1061,7 +824,7 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
 
   const renderCitizenPortal = () => (
     <div className="max-w-4xl mx-auto">
-      <div className={`rounded-2xl shadow-2xl p-4 sm:p-8 mb-6 sm:mb-8 relative overflow-hidden transition-all duration-300 ${
+      <div className={`rounded-2xl shadow-2xl p-8 mb-8 relative overflow-hidden transition-all duration-300 ${
         darkMode
           ? 'glass-dark border border-gray-700'
           : 'glass border border-white/30'
@@ -1069,27 +832,27 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
         {/* Animated gradient background */}
         <div className={`absolute inset-0 animated-gradient -z-10 ${darkMode ? 'opacity-10' : 'opacity-20'}`}></div>
 
-        <div className="text-center mb-6 sm:mb-8 fade-in">
-          <div className="flex justify-center mb-3 sm:mb-4">
-            <div className={`rounded-full p-3 sm:p-4 float shimmer hover-lift transition-all duration-300 ${
+        <div className="text-center mb-8 fade-in">
+          <div className="flex justify-center mb-4">
+            <div className={`rounded-full p-4 float shimmer hover-lift transition-all duration-300 ${
               darkMode
                 ? 'bg-gradient-to-br from-blue-900 to-blue-700'
                 : 'bg-gradient-to-br from-biblical-parchment to-biblical-sand'
             }`}>
-              <Users className={`w-8 h-8 sm:w-12 sm:h-12 transition-colors duration-300 ${darkMode ? 'text-blue-300' : 'text-biblical-deepblue'}`} />
+              <Users className={`w-12 h-12 transition-colors duration-300 ${darkMode ? 'text-blue-300' : 'text-biblical-deepblue'}`} />
             </div>
           </div>
-          <h2 className={`text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4 font-serif slide-in-left transition-colors duration-300 ${
+          <h2 className={`text-4xl md:text-5xl font-bold mb-4 font-serif slide-in-left transition-colors duration-300 ${
             darkMode ? 'text-white' : 'text-biblical-deepblue'
           }`}>Your Voice. Your Story. Your Impact.</h2>
-          <p className={`text-sm sm:text-lg max-w-3xl mx-auto fade-in transition-colors duration-300 px-2 ${
+          <p className={`text-lg max-w-3xl mx-auto fade-in transition-colors duration-300 ${
             darkMode ? 'text-gray-300' : 'text-gray-600'
           }`}>
             Share how federal policies are affecting your life, family, and community. Your story helps hold our government accountable to real people.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-3 gap-6 mb-8">
           <div className="text-center fade-in hover-lift">
             <div className={`rounded-xl p-4 mb-3 border-l-4 transition-all duration-300 group ${
               darkMode
@@ -1132,11 +895,11 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
         </div>
 
         {/* Input Method Selection Cards */}
-        <div className="mb-6 sm:mb-8 fade-in">
-          <h3 className={`text-base sm:text-lg font-semibold mb-3 sm:mb-4 slide-in-left transition-colors duration-300 ${
+        <div className="mb-8 fade-in">
+          <h3 className={`text-lg font-semibold mb-4 slide-in-left transition-colors duration-300 ${
             darkMode ? 'text-white' : 'text-gray-900'
           }`}>Choose How to Share Your Story</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {/* Text Story Card */}
             <button
               type="button"
@@ -1248,8 +1011,8 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
           </div>
         </div>
 
-        <form onSubmit={handleSubmitStory} className="space-y-4 sm:space-y-6 fade-in">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <form onSubmit={handleSubmitStory} className="space-y-6 fade-in">
+          <div className="grid grid-cols-2 gap-4">
             <div className="slide-in-left">
               <label className={`block text-sm font-medium mb-2 transition-colors duration-300 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Your Location</label>
               <input
@@ -1308,16 +1071,16 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
           {inputMethod === 'voice' && (
             <div className="fade-in">
               <label className={`block text-sm font-medium mb-2 transition-colors duration-300 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Voice Memo</label>
-              <div className={`border-2 border-dashed rounded-xl p-4 sm:p-8 text-center relative overflow-hidden group transition-all duration-300 ${
+              <div className={`border-2 border-dashed rounded-xl p-8 text-center relative overflow-hidden group transition-all duration-300 ${
                 darkMode ? 'border-gray-600 glass-dark' : 'border-biblical-sand glass'
               }`}>
                 <div className={`absolute inset-0 animated-gradient -z-10 ${darkMode ? 'opacity-5' : 'opacity-10'}`}></div>
-                <Mic className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 opacity-60 float pulse-slow transition-colors duration-300 ${
+                <Mic className={`w-16 h-16 mx-auto mb-4 opacity-60 float pulse-slow transition-colors duration-300 ${
                   darkMode ? 'text-blue-400' : 'text-biblical-deepblue'
                 }`} />
-                <h4 className={`font-semibold mb-2 text-sm sm:text-base transition-colors duration-300 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Upload or Record Your Story</h4>
-                <p className={`mb-3 sm:mb-4 text-sm transition-colors duration-300 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Share your experience through voice - we'll transcribe it</p>
-                <p className={`text-xs sm:text-sm mb-3 sm:mb-4 transition-colors duration-300 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>MP3, M4A, WAV, OGG • Max 50MB</p>
+                <h4 className={`font-semibold mb-2 transition-colors duration-300 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Upload or Record Your Story</h4>
+                <p className={`mb-4 transition-colors duration-300 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Share your experience through voice - we'll transcribe it for you</p>
+                <p className={`text-sm mb-4 transition-colors duration-300 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Accepted formats: MP3, M4A, WAV, OGG • Max 50MB • Up to 10 minutes</p>
                 {formData.voiceFile ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                     <div className="flex items-center justify-center gap-2 text-green-700">
@@ -1536,141 +1299,139 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
         </form>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-        <div className="bg-white rounded-lg p-3 sm:p-4 shadow border border-biblical-sand">
-          <div className="text-lg sm:text-2xl font-bold text-biblical-deepblue">{liveMetrics.totalStories.toLocaleString()}</div>
-          <div className="text-xs sm:text-sm text-gray-600">Stories Submitted</div>
+      <div className="grid grid-cols-4 gap-4 mb-8">
+        <div className="bg-white rounded-lg p-4 shadow border border-biblical-sand">
+          <div className="text-2xl font-bold text-biblical-deepblue">{liveMetrics.totalStories.toLocaleString()}</div>
+          <div className="text-sm text-gray-600">Stories Submitted</div>
         </div>
-        <div className="bg-white rounded-lg p-3 sm:p-4 shadow border border-biblical-sand">
-          <div className="text-lg sm:text-2xl font-bold text-biblical-gold">{liveMetrics.verifiedStories.toLocaleString()}</div>
-          <div className="text-xs sm:text-sm text-gray-600">Stories Verified</div>
+        <div className="bg-white rounded-lg p-4 shadow border border-biblical-sand">
+          <div className="text-2xl font-bold text-biblical-gold">{liveMetrics.verifiedStories.toLocaleString()}</div>
+          <div className="text-sm text-gray-600">Stories Verified</div>
         </div>
-        <div className="bg-white rounded-lg p-3 sm:p-4 shadow border border-biblical-sand">
-          <div className="text-lg sm:text-2xl font-bold text-biblical-deepblue">{liveMetrics.storiesThisHour}</div>
-          <div className="text-xs sm:text-sm text-gray-600">Stories This Hour</div>
+        <div className="bg-white rounded-lg p-4 shadow border border-biblical-sand">
+          <div className="text-2xl font-bold text-biblical-deepblue">{liveMetrics.storiesThisHour}</div>
+          <div className="text-sm text-gray-600">Stories This Hour</div>
         </div>
-        <div className="bg-white rounded-lg p-3 sm:p-4 shadow border border-biblical-sand">
-          <div className="text-lg sm:text-2xl font-bold text-biblical-gold">94.7%</div>
-          <div className="text-xs sm:text-sm text-gray-600">Verification Rate</div>
+        <div className="bg-white rounded-lg p-4 shadow border border-biblical-sand">
+          <div className="text-2xl font-bold text-biblical-gold">94.7%</div>
+          <div className="text-sm text-gray-600">Verification Rate</div>
         </div>
       </div>
     </div>
   );
 
   const renderClientDashboard = () => (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       {/* Header with real-time metrics */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Intelligence Command Center</h2>
-            <p className="text-sm sm:text-base text-gray-600">Real-time political intelligence platform</p>
+            <h2 className="text-2xl font-bold text-gray-900">Intelligence Command Center</h2>
+            <p className="text-gray-600">Real-time political intelligence and creative services platform</p>
           </div>
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-xs sm:text-sm text-gray-500">Monthly Revenue</div>
-              <div className="text-lg sm:text-2xl font-bold text-green-600">${(liveMetrics.monthlyRevenue / 1000000).toFixed(1)}M</div>
+              <div className="text-sm text-gray-500">Monthly Revenue</div>
+              <div className="text-2xl font-bold text-green-600">${(liveMetrics.monthlyRevenue / 1000000).toFixed(1)}M</div>
             </div>
-            <div className="flex items-center gap-2 bg-green-100 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
+            <div className="flex items-center gap-2 bg-green-100 px-3 py-2 rounded-lg">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs sm:text-sm font-medium text-green-800">Live</span>
+              <span className="text-sm font-medium text-green-800">Live Intelligence</span>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          <div className="bg-blue-50 rounded-lg p-3 sm:p-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-700">Active Stories</span>
+        <div className="grid grid-cols-5 gap-4">
+          <div className="bg-blue-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">Active Stories</span>
             </div>
-            <div className="text-lg sm:text-2xl font-bold text-blue-600">{liveMetrics.totalStories.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-blue-600">{liveMetrics.totalStories.toLocaleString()}</div>
             <div className="text-xs text-blue-600">+{liveMetrics.storiesThisHour} this hour</div>
           </div>
-
-          <div className="bg-green-50 rounded-lg p-3 sm:p-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-              <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-700">Verified</span>
+          
+          <div className="bg-green-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Check className="w-5 h-5 text-green-600" />
+              <span className="text-sm font-medium text-gray-700">Verified</span>
             </div>
-            <div className="text-lg sm:text-2xl font-bold text-green-600">{liveMetrics.verifiedStories.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-green-600">{liveMetrics.verifiedStories.toLocaleString()}</div>
             <div className="text-xs text-green-600">94.7% rate</div>
           </div>
 
-          <div className="bg-purple-50 rounded-lg p-3 sm:p-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-              <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-700">Clients</span>
+          <div className="bg-purple-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Briefcase className="w-5 h-5 text-purple-600" />
+              <span className="text-sm font-medium text-gray-700">Active Clients</span>
             </div>
-            <div className="text-lg sm:text-2xl font-bold text-purple-600">{liveMetrics.activeClients}</div>
-            <div className="text-xs text-purple-600">Enterprise</div>
+            <div className="text-2xl font-bold text-purple-600">{liveMetrics.activeClients}</div>
+            <div className="text-xs text-purple-600">Enterprise tier</div>
           </div>
 
-          <div className="bg-orange-50 rounded-lg p-3 sm:p-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-              <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-700">Creative</span>
+          <div className="bg-orange-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className="w-5 h-5 text-orange-600" />
+              <span className="text-sm font-medium text-gray-700">Creative Requests</span>
             </div>
-            <div className="text-lg sm:text-2xl font-bold text-orange-600">156</div>
+            <div className="text-2xl font-bold text-orange-600">156</div>
             <div className="text-xs text-orange-600">This week</div>
           </div>
 
-          <div className="bg-red-50 rounded-lg p-3 sm:p-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-700">High Impact</span>
+          <div className="bg-red-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <span className="text-sm font-medium text-gray-700">High Impact</span>
             </div>
-            <div className="text-lg sm:text-2xl font-bold text-red-600">23</div>
-            <div className="text-xs text-red-600">Critical</div>
+            <div className="text-2xl font-bold text-red-600">23</div>
+            <div className="text-xs text-red-600">Critical stories</div>
           </div>
         </div>
       </div>
 
       {/* Search and filters */}
-      <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+      <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="flex gap-4 items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search stories..."
+              placeholder="Search stories by location, policy area, keywords..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm"
+              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="flex gap-2 sm:gap-4">
-            <select
-              value={selectedPolicyArea}
-              onChange={(e) => setSelectedPolicyArea(e.target.value)}
-              className="flex-1 sm:flex-none px-3 py-2 bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-            >
-              <option value="all" className="bg-white text-gray-900">All Areas</option>
-              {policyAreas.map(area => (
-                <option key={area.id} value={area.id} className="bg-white text-gray-900">{area.name}</option>
-              ))}
-            </select>
-            <button className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2 text-sm whitespace-nowrap">
-              <Filter className="w-4 h-4" />
-              <span className="hidden sm:inline">Filters</span>
-            </button>
-          </div>
+          <select
+            value={selectedPolicyArea}
+            onChange={(e) => setSelectedPolicyArea(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Policy Areas</option>
+            {policyAreas.map(area => (
+              <option key={area.id} value={area.id}>{area.name}</option>
+            ))}
+          </select>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2">
+            <Filter className="w-4 h-4" />
+            Advanced Filters
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main story feed */}
-        <div className="lg:col-span-2 space-y-3 sm:space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           {filteredStories.map(story => {
             const verification = getVerificationBadge(story.verificationStatus, story.verificationScore);
             return (
-              <div
-                key={story.id}
-                className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 hover:shadow-md transition-shadow cursor-pointer"
+              <div 
+                key={story.id} 
+                className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow cursor-pointer"
                 onClick={() => setSelectedStory(story)}
               >
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start gap-3">
                     <div className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(story.severity)}`}>
                       {story.severity}
                     </div>
@@ -1679,7 +1440,7 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
                     </span>
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <MapPin className="w-3 h-3" />
-                      <span className="truncate max-w-[150px] sm:max-w-none">{story.location.city}, {story.location.state}</span>
+                      {story.location.city}, {story.location.state} • {story.location.district}
                     </div>
                   </div>
                   <div className="text-xs text-gray-500">
@@ -1687,10 +1448,10 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
                   </div>
                 </div>
 
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2 sm:mb-3">{story.headline}</h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4 line-clamp-2 sm:line-clamp-3">{story.story}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">{story.headline}</h3>
+                <p className="text-gray-600 mb-4 line-clamp-3">{story.story}</p>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-3 sm:mb-4 text-sm">
+                <div className="grid grid-cols-4 gap-4 mb-4 text-sm">
                   <div className="text-center p-2 bg-gray-50 rounded">
                     <div className="font-semibold text-gray-900">{story.impact.affected_population.toLocaleString()}</div>
                     <div className="text-gray-500">Affected</div>
@@ -1704,9 +1465,7 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
                     <div className="text-gray-500">Confidence</div>
                   </div>
                   <div className="text-center p-2 bg-gray-50 rounded">
-                    <div className="font-semibold text-purple-600">
-                      {story.aiAnalysis?.messageResonance != null ? `${story.aiAnalysis.messageResonance}%` : '—'}
-                    </div>
+                    <div className="font-semibold text-purple-600">{story.aiAnalysis.messageResonance}%</div>
                     <div className="text-gray-500">Resonance</div>
                   </div>
                 </div>
@@ -1714,7 +1473,7 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
                 <div className="flex items-center justify-between pt-4 border-t">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Eye className="w-4 h-4" />
-                    {story.aiAnalysis?.competitiveVulnerability && story.aiAnalysis.competitiveVulnerability !== 'unknown' ? (
+                    {story.aiAnalysis.competitiveVulnerability !== 'unknown' ? (
                       <>
                         <span className="font-medium capitalize">{story.aiAnalysis.competitiveVulnerability}</span> vulnerability
                         <span className="text-gray-400">•</span>
@@ -1829,59 +1588,59 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
   );
 
   const renderCreativeServices = () => (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">AI-Powered Creative Intelligence</h2>
-            <p className="text-sm sm:text-base text-gray-600">Transform citizen stories into winning communications</p>
+            <h2 className="text-2xl font-bold text-gray-900">AI-Powered Creative Intelligence</h2>
+            <p className="text-gray-600">Transform verified citizen stories into winning political communications</p>
           </div>
-          <button className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-sm sm:text-base">
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
             <Brain className="w-4 h-4" />
-            New Request
+            New Creative Request
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <div className="text-center p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg">
-            <div className="bg-blue-100 rounded-full p-2 sm:p-3 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4">
-              <Brain className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600" />
+        <div className="grid grid-cols-3 gap-6 mb-8">
+          <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg">
+            <div className="bg-blue-100 rounded-full p-3 w-16 h-16 mx-auto mb-4">
+              <Brain className="w-10 h-10 text-blue-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">AI Story Analysis</h3>
-            <p className="text-xs sm:text-sm text-gray-600">Advanced AI identifies compelling elements for maximum impact</p>
+            <h3 className="font-semibold text-gray-900 mb-2">AI Story Analysis</h3>
+            <p className="text-sm text-gray-600">Advanced AI identifies the most compelling elements of citizen stories for maximum political impact</p>
           </div>
-          <div className="text-center p-4 sm:p-6 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg">
-            <div className="bg-green-100 rounded-full p-2 sm:p-3 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4">
-              <Target className="w-8 h-8 sm:w-10 sm:h-10 text-green-600" />
+          <div className="text-center p-6 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg">
+            <div className="bg-green-100 rounded-full p-3 w-16 h-16 mx-auto mb-4">
+              <Target className="w-10 h-10 text-green-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Demographic Targeting</h3>
-            <p className="text-xs sm:text-sm text-gray-600">Precision targeting based on verified local impact data</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Demographic Targeting</h3>
+            <p className="text-sm text-gray-600">Precision targeting based on story demographics and verified local impact data</p>
           </div>
-          <div className="text-center p-4 sm:p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
-            <div className="bg-purple-100 rounded-full p-2 sm:p-3 w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4">
-              <Award className="w-8 h-8 sm:w-10 sm:h-10 text-purple-600" />
+          <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
+            <div className="bg-purple-100 rounded-full p-3 w-16 h-16 mx-auto mb-4">
+              <Award className="w-10 h-10 text-purple-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Professional Production</h3>
-            <p className="text-xs sm:text-sm text-gray-600">Full-service production from concept to camera-ready</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Professional Production</h3>
+            <p className="text-sm text-gray-600">Full-service creative production from concept to camera-ready materials</p>
           </div>
         </div>
       </div>
 
       {/* Creative templates showcase */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {creativeTemplates.map(template => (
-          <div key={template.id} className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
+          <div key={template.id} className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="font-semibold text-base sm:text-lg text-gray-900">{template.title}</h3>
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-2 text-xs sm:text-sm text-gray-600">
+                <h3 className="font-semibold text-lg text-gray-900">{template.title}</h3>
+                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                   <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <Users className="w-4 h-4" />
                     {template.stories} stories
                   </span>
                   <span className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                    {template.effectiveness}%
+                    <TrendingUp className="w-4 h-4" />
+                    {template.effectiveness}% effective
                   </span>
                 </div>
               </div>
@@ -1910,23 +1669,23 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
               <div>
-                <div className="font-medium text-gray-900 text-xs sm:text-sm">Target Audience</div>
-                <div className="text-gray-600 text-xs sm:text-sm">{template.targetAudience}</div>
+                <div className="font-medium text-gray-900">Target Audience</div>
+                <div className="text-gray-600">{template.targetAudience}</div>
               </div>
               <div>
-                <div className="font-medium text-gray-900 text-xs sm:text-sm">Projected Reach</div>
-                <div className="text-blue-600 font-medium text-xs sm:text-sm">{template.projectedReach}</div>
+                <div className="font-medium text-gray-900">Projected Reach</div>
+                <div className="text-blue-600 font-medium">{template.projectedReach}</div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 sm:pt-4 border-t">
+            <div className="flex items-center justify-between pt-4 border-t">
               <div className="text-sm">
-                <div className="font-medium text-gray-900 text-xs sm:text-sm">Production Cost</div>
-                <div className="text-green-600 font-medium text-xs sm:text-sm">{template.estimatedCost}</div>
+                <div className="font-medium text-gray-900">Production Cost</div>
+                <div className="text-green-600 font-medium">{template.estimatedCost}</div>
               </div>
-              <button className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
                 Request Production
               </button>
             </div>
@@ -1935,10 +1694,10 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
       </div>
 
       {/* Custom creative request form */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
-        <h3 className="font-semibold text-base sm:text-lg text-gray-900 mb-3 sm:mb-4">Custom Creative Request</h3>
-        <div className="space-y-3 sm:space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <h3 className="font-semibold text-lg text-gray-900 mb-4">Custom Creative Request</h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Creative Type</label>
               <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
@@ -1994,76 +1753,67 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
           </div>
         </div>
       </div>
-
-      {/* AI Video Generator */}
-      <VideoGenerator
-        story={selectedStory}
-        onVideoGenerated={(result) => {
-          console.log('Video generated:', result);
-          // Could add notification or update state here
-        }}
-      />
     </div>
   );
 
   const renderBusinessIntelligence = () => (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Business Intelligence Dashboard</h2>
-
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Business Intelligence Dashboard</h2>
+        
         {/* Revenue metrics */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
-          <div className="bg-green-50 rounded-lg p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-              <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-              <h3 className="font-semibold text-gray-900 text-xs sm:text-base">Revenue</h3>
+        <div className="grid grid-cols-4 gap-6 mb-8">
+          <div className="bg-green-50 rounded-lg p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <DollarSign className="w-6 h-6 text-green-600" />
+              <h3 className="font-semibold text-gray-900">Monthly Revenue</h3>
             </div>
-            <div className="text-xl sm:text-3xl font-bold text-green-600 mb-1">${(liveMetrics.monthlyRevenue / 1000000).toFixed(1)}M</div>
-            <div className="text-xs sm:text-sm text-green-600">+23% vs last month</div>
+            <div className="text-3xl font-bold text-green-600 mb-1">${(liveMetrics.monthlyRevenue / 1000000).toFixed(1)}M</div>
+            <div className="text-sm text-green-600">+23% vs last month</div>
+          </div>
+          
+          <div className="bg-blue-50 rounded-lg p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-6 h-6 text-blue-600" />
+              <h3 className="font-semibold text-gray-900">Active Clients</h3>
+            </div>
+            <div className="text-3xl font-bold text-blue-600 mb-1">{liveMetrics.activeClients}</div>
+            <div className="text-sm text-blue-600">8 new this month</div>
           </div>
 
-          <div className="bg-blue-50 rounded-lg p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-              <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-              <h3 className="font-semibold text-gray-900 text-xs sm:text-base">Clients</h3>
+          <div className="bg-purple-50 rounded-lg p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="w-6 h-6 text-purple-600" />
+              <h3 className="font-semibold text-gray-900">Creative Requests</h3>
             </div>
-            <div className="text-xl sm:text-3xl font-bold text-blue-600 mb-1">{liveMetrics.activeClients}</div>
-            <div className="text-xs sm:text-sm text-blue-600">8 new this month</div>
+            <div className="text-3xl font-bold text-purple-600 mb-1">156</div>
+            <div className="text-sm text-purple-600">$1.2M pipeline</div>
           </div>
 
-          <div className="bg-purple-50 rounded-lg p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-              <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
-              <h3 className="font-semibold text-gray-900 text-xs sm:text-base">Creative</h3>
+          <div className="bg-orange-50 rounded-lg p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="w-6 h-6 text-orange-600" />
+              <h3 className="font-semibold text-gray-900">Story Verification</h3>
             </div>
-            <div className="text-xl sm:text-3xl font-bold text-purple-600 mb-1">156</div>
-            <div className="text-xs sm:text-sm text-purple-600">$1.2M pipeline</div>
-          </div>
-
-          <div className="bg-orange-50 rounded-lg p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-              <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
-              <h3 className="font-semibold text-gray-900 text-xs sm:text-base">Verification</h3>
-            </div>
-            <div className="text-xl sm:text-3xl font-bold text-orange-600 mb-1">94.7%</div>
-            <div className="text-xs sm:text-sm text-orange-600">Industry leading</div>
+            <div className="text-3xl font-bold text-orange-600 mb-1">94.7%</div>
+            <div className="text-sm text-orange-600">Industry leading</div>
           </div>
         </div>
 
         {/* Client breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-2 gap-6">
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Top Clients by Revenue</h3>
-            <div className="space-y-3 sm:space-y-4">
+            <h3 className="font-semibold text-gray-900 mb-4">Top Clients by Revenue</h3>
+            <div className="space-y-4">
               {clientAccounts.map(client => (
-                <div key={client.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 bg-gray-50 rounded-lg gap-2 sm:gap-0">
+                <div key={client.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <div className="font-medium text-gray-900 text-sm sm:text-base">{client.name}</div>
-                    <div className="text-xs sm:text-sm text-gray-600 capitalize">{client.type.replace('_', ' ')} • {client.tier}</div>
+                    <div className="font-medium text-gray-900">{client.name}</div>
+                    <div className="text-sm text-gray-600 capitalize">{client.type.replace('_', ' ')} • {client.tier}</div>
                   </div>
-                  <div className="sm:text-right">
-                    <div className="font-semibold text-green-600 text-sm sm:text-base">${(client.monthlyRevenue / 1000).toFixed(0)}K/mo</div>
-                    <div className="text-xs text-gray-500">{client.storiesAccessed} stories</div>
+                  <div className="text-right">
+                    <div className="font-semibold text-green-600">${(client.monthlyRevenue / 1000).toFixed(0)}K/mo</div>
+                    <div className="text-xs text-gray-500">{client.storiesAccessed} stories accessed</div>
                   </div>
                 </div>
               ))}
@@ -2071,39 +1821,39 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Revenue by Service Type</h3>
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <Database className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+            <h3 className="font-semibold text-gray-900 mb-4">Revenue by Service Type</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Database className="w-5 h-5 text-blue-600" />
                   <div>
-                    <div className="font-medium text-gray-900 text-xs sm:text-base">Intelligence Subscriptions</div>
-                    <div className="text-xs text-gray-600 hidden sm:block">Base platform access</div>
+                    <div className="font-medium text-gray-900">Intelligence Subscriptions</div>
+                    <div className="text-sm text-gray-600">Base platform access</div>
                   </div>
                 </div>
-                <div className="text-sm sm:text-lg font-bold text-blue-600">$1.4M</div>
+                <div className="text-lg font-bold text-blue-600">$1.4M</div>
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Brain className="w-5 h-5 text-purple-600" />
+                  <div>
+                    <div className="font-medium text-gray-900">Creative Services</div>
+                    <div className="text-sm text-gray-600">Custom ad production</div>
+                  </div>
+                </div>
+                <div className="text-lg font-bold text-purple-600">$680K</div>
               </div>
 
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-purple-50 rounded-lg">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
+              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-green-600" />
                   <div>
-                    <div className="font-medium text-gray-900 text-xs sm:text-base">Creative Services</div>
-                    <div className="text-xs text-gray-600 hidden sm:block">Custom ad production</div>
+                    <div className="font-medium text-gray-900">Custom Research</div>
+                    <div className="text-sm text-gray-600">Bespoke analysis</div>
                   </div>
                 </div>
-                <div className="text-sm sm:text-lg font-bold text-purple-600">$680K</div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-                  <div>
-                    <div className="font-medium text-gray-900 text-xs sm:text-base">Custom Research</div>
-                    <div className="text-xs text-gray-600 hidden sm:block">Bespoke analysis</div>
-                  </div>
-                </div>
-                <div className="text-sm sm:text-lg font-bold text-green-600">$260K</div>
+                <div className="text-lg font-bold text-green-600">$260K</div>
               </div>
             </div>
           </div>
@@ -2114,6 +1864,94 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      {/* Navigation */}
+      <nav className={`shadow-sm border-b transition-colors duration-300 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-3">
+                <div className={`rounded-lg p-2 transition-colors duration-300 ${darkMode ? 'bg-blue-500' : 'bg-blue-600'}`}>
+                  <Activity className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className={`font-bold transition-colors duration-300 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Democratic Accountability Platform</div>
+                  <div className={`text-xs transition-colors duration-300 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Real-time Political Intelligence</div>
+                </div>
+              </div>
+              
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setActiveView('citizen')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                    activeView === 'citizen'
+                      ? darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                      : darkMode ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  Citizen Portal
+                </button>
+                <button
+                  onClick={() => setActiveView('dashboard')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                    activeView === 'dashboard'
+                      ? darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                      : darkMode ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  Intelligence Dashboard
+                </button>
+                <button
+                  onClick={() => setActiveView('creative')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                    activeView === 'creative'
+                      ? darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                      : darkMode ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  Creative Services
+                </button>
+                <button
+                  onClick={() => setActiveView('business')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                    activeView === 'business'
+                      ? darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                      : darkMode ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  Business Intelligence
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Live: {liveMetrics.storiesThisHour}/hr</span>
+              </div>
+              <button
+                onClick={() => setRealTimeEnabled(!realTimeEnabled)}
+                className={`p-2 rounded-md transition-all duration-300 hover-lift ${realTimeEnabled ? 'text-green-600' : 'text-gray-400'}`}
+              >
+                {realTimeEnabled ? <Wifi className="w-5 h-5" /> : <X className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-md transition-all duration-300 hover-lift ${darkMode ? 'text-yellow-400 bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {darkMode ? <Sun className="w-5 h-5 rotate-slow" /> : <Moon className="w-5 h-5" />}
+              </button>
+              <div className="relative">
+                <Bell className={`w-5 h-5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`} />
+                {notifications.length > 0 && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full text-xs"></div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         {/* Animated background for citizen portal */}
@@ -2132,117 +1970,93 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
 
       {/* Story detail modal */}
       {selectedStory && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50"
-          onClick={() => setSelectedStory(null)}
-        >
-          <div
-            className="bg-white rounded-lg max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 sm:p-6 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Story Details</h2>
-              <button
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Story Details</h2>
+              <button 
                 onClick={() => setSelectedStory(null)}
-                className="p-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-md"
+                className="p-2 hover:bg-gray-100 rounded-md"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+            
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Story ID</div>
-                  <div className="font-mono text-xs sm:text-sm">{selectedStory.id}</div>
+                  <div className="text-sm font-medium text-gray-500 mb-1">Story ID</div>
+                  <div className="font-mono text-sm">{selectedStory.id}</div>
                 </div>
                 <div>
-                  <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Verification Score</div>
+                  <div className="text-sm font-medium text-gray-500 mb-1">Verification Score</div>
                   <div className="font-semibold text-green-600">{selectedStory.verificationScore}%</div>
                 </div>
               </div>
 
               <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Full Story</div>
-                <div className="p-3 sm:p-4 bg-gray-50 rounded-lg text-gray-800 text-sm">
+                <div className="text-sm font-medium text-gray-500 mb-2">Full Story</div>
+                <div className="p-4 bg-gray-50 rounded-lg text-gray-800">
                   {selectedStory.story}
                 </div>
               </div>
 
               <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-2">AI Analysis & Recommendations</div>
-                {aiAnalysisLoading ? (
-                  <div className="text-center py-6">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-                    <div className="text-sm text-gray-600">Running AI analysis...</div>
+                <div className="text-sm font-medium text-gray-500 mb-2">AI Analysis & Recommendations</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="font-medium text-blue-900 mb-2">Message Resonance</div>
+                    <div className="text-2xl font-bold text-blue-600">{selectedStory.aiAnalysis.messageResonance}%</div>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="p-3 sm:p-4 bg-blue-50 rounded-lg">
-                      <div className="font-medium text-blue-900 mb-1 sm:mb-2 text-sm">Message Resonance</div>
-                      <div className="text-xl sm:text-2xl font-bold text-blue-600">
-                        {selectedStory.aiAnalysis?.messageResonance != null && selectedStory.aiAnalysis.messageResonance > 0
-                          ? `${selectedStory.aiAnalysis.messageResonance}%`
-                          : <span className="text-gray-400 text-base sm:text-lg">Pending</span>
-                        }
-                      </div>
-                    </div>
-                    <div className="p-3 sm:p-4 bg-purple-50 rounded-lg">
-                      <div className="font-medium text-purple-900 mb-1 sm:mb-2 text-sm">Competitive Vulnerability</div>
-                      <div className="text-base sm:text-lg font-semibold text-purple-600 capitalize">
-                        {selectedStory.aiAnalysis?.competitiveVulnerability && selectedStory.aiAnalysis.competitiveVulnerability !== 'unknown'
-                          ? selectedStory.aiAnalysis.competitiveVulnerability
-                          : <span className="text-gray-400 text-xs sm:text-sm">Pending analysis</span>
-                        }
-                      </div>
+                  <div className="p-4 bg-purple-50 rounded-lg">
+                    <div className="font-medium text-purple-900 mb-2">Competitive Vulnerability</div>
+                    <div className="text-lg font-semibold text-purple-600 capitalize">
+                      {selectedStory.aiAnalysis.competitiveVulnerability !== 'unknown'
+                        ? selectedStory.aiAnalysis.competitiveVulnerability
+                        : <span className="text-gray-400 text-sm">Pending analysis</span>
+                      }
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Recommended Talking Points</div>
+                <div className="text-sm font-medium text-gray-500 mb-2">Recommended Talking Points</div>
                 <div className="flex flex-wrap gap-2">
-                  {aiAnalysisLoading ? (
-                    <span className="text-gray-400 text-sm">Analyzing...</span>
-                  ) : selectedStory.aiAnalysis?.recommendedTalkingPoints?.length > 0 ? (
-                    selectedStory.aiAnalysis.recommendedTalkingPoints.map(point => (
-                      <span key={point} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                        {point.replace(/_/g, ' ')}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-gray-400 text-sm">Analysis pending...</span>
-                  )}
+                  {selectedStory.aiAnalysis.recommendedTalkingPoints.map(point => (
+                    <span key={point} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                      {point.replace(/_/g, ' ')}
+                    </span>
+                  ))}
                 </div>
               </div>
 
               {/* Census Bureau Verification */}
-              <div className="border-t pt-4 sm:pt-6">
+              <div className="border-t pt-6">
                 <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-                  <div className="text-xs sm:text-sm font-medium text-gray-700">US Census Bureau Verification</div>
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <div className="text-sm font-medium text-gray-700">US Census Bureau Verification</div>
                 </div>
 
                 {censusLoading && (
-                  <div className="text-center py-6 sm:py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-                    <div className="text-xs sm:text-sm text-gray-600">Fetching Census data for ZIP {selectedStory.location.zip}...</div>
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                    <div className="text-sm text-gray-600">Fetching Census data for ZIP {selectedStory.location.zip}...</div>
                   </div>
                 )}
 
                 {!censusLoading && censusData && censusVerification && (
-                  <div className="space-y-3 sm:space-y-4">
-                    <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg p-3 sm:p-4 border border-green-200">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg p-4 border border-green-200">
+                      <div className="flex items-center justify-between mb-3">
                         <div>
-                          <div className="font-semibold text-gray-900 text-sm sm:text-base">Census Confidence Score</div>
-                          <div className="text-xs text-gray-600">Based on {censusData.dataYear} ACS 5-Year</div>
+                          <div className="font-semibold text-gray-900">Census Confidence Score</div>
+                          <div className="text-xs text-gray-600">Based on {censusData.dataYear} ACS 5-Year Estimates</div>
                         </div>
-                        <div className="text-2xl sm:text-3xl font-bold text-green-600">{censusVerification.confidence}%</div>
+                        <div className="text-3xl font-bold text-green-600">{censusVerification.confidence}%</div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-3">
+                      <div className="grid grid-cols-4 gap-3 mb-3">
                         <div className="bg-white rounded p-2 text-center">
                           <div className="text-xs text-gray-500">Population</div>
                           <div className="font-semibold text-gray-900">{censusData.population.total.toLocaleString()}</div>
@@ -2903,21 +2717,10 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
                     </>
                   )}
                 </button>
-                <button
-                  onClick={handleGenerateResearchBrief}
-                  disabled={researchLoading}
-                  className="flex-1 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {researchLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Generating Research...
-                    </>
-                  ) : (
-                    'Request Custom Research'
-                  )}
+                <button className="flex-1 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">
+                  Request Custom Research
                 </button>
-                <button className="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700">
+                <button className="px-6 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50">
                   Export Data
                 </button>
               </div>
@@ -3139,14 +2942,8 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
 
       {/* Creative Brief Modal */}
       {showBriefModal && creativeBrief && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={() => setShowBriefModal(false)}
-        >
-          <div
-            className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50">
               <div className="flex items-center gap-3">
@@ -3170,7 +2967,7 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
             <div className="px-6 py-3 border-b bg-gray-50 flex gap-3">
               <button
                 onClick={copyBriefToClipboard}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium text-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
               >
                 <Copy className="w-4 h-4" />
                 Copy to Clipboard
@@ -3182,116 +2979,12 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
                 <FileDown className="w-4 h-4" />
                 Download as Markdown
               </button>
-              <button
-                onClick={handleGenerateCommercial}
-                disabled={isGeneratingVideo}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
-              >
-                {isGeneratingVideo ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Video className="w-4 h-4" />
-                    Generate Sample Commercial
-                  </>
-                )}
-              </button>
               <div className="flex-1"></div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <CheckCircle2 className="w-4 h-4 text-green-600" />
                 <span>Based on verified Census data</span>
               </div>
             </div>
-
-            {/* Video Generation Status */}
-            {(isGeneratingVideo || generatedVideoUrl || videoError) && (
-              <div className="px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-pink-50">
-                {videoError && (
-                  <div className="flex items-center gap-3 text-red-700">
-                    <AlertCircle className="w-5 h-5" />
-                    <span className="font-medium">Error: {videoError}</span>
-                    <button
-                      onClick={() => setVideoError(null)}
-                      className="ml-auto text-sm text-red-600 hover:text-red-800"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                )}
-                {isGeneratingVideo && !videoError && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                      <span className="font-medium text-purple-800">Generating AI Commercial Video...</span>
-                      <span className="text-sm text-purple-600 ml-auto">Est. 1-3 minutes</span>
-                    </div>
-                    <div className="w-full bg-purple-200 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.max(5, videoProgress)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                {generatedVideoUrl && !isGeneratingVideo && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-green-700">
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span className="font-medium">Sample Commercial Generated!</span>
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                          <video
-                            src={generatedVideoUrl}
-                            controls
-                            className="w-full h-full"
-                          >
-                            Your browser does not support video playback.
-                          </video>
-                        </div>
-                        <div className="flex items-center gap-3 mt-3">
-                          <a
-                            href={generatedVideoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm font-medium"
-                          >
-                            <Download className="w-4 h-4" />
-                            Download Video
-                          </a>
-                          <button
-                            onClick={() => { setGeneratedVideoUrl(null); setVideoProgress(0); setVideoPrompt(null); }}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                          >
-                            Clear
-                          </button>
-                          <span className="text-sm text-gray-500 ml-auto">
-                            10s sample • 720p • Kling 2.6 AI
-                          </span>
-                        </div>
-                      </div>
-                      {videoPrompt && (
-                        <div className="w-80 flex-shrink-0">
-                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 h-full">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                              <FileText className="w-4 h-4" />
-                              Prompt Sent to Kling 2.6
-                            </h4>
-                            <div className="text-xs text-gray-600 whitespace-pre-wrap max-h-48 overflow-y-auto font-mono bg-white border border-gray-100 rounded p-3">
-                              {videoPrompt}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
@@ -3339,117 +3032,13 @@ CONTEXT: This community is affected by ${policyArea} changes. "${headline.substr
         </div>
       )}
 
-      {/* Research Brief Modal */}
-      {showResearchModal && researchBrief && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={() => setShowResearchModal(false)}
-        >
-          <div
-            className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-green-50 to-blue-50">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-600 rounded-lg p-2">
-                  <FileText className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Research Brief Generated</h2>
-                  <p className="text-sm text-gray-600">Story ID: {selectedStory?.id}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowResearchModal(false)}
-                className="p-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-md transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="px-6 py-3 border-b bg-gray-50 flex gap-3">
-              <button
-                onClick={copyResearchToClipboard}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-sm"
-              >
-                <Copy className="w-4 h-4" />
-                Copy to Clipboard
-              </button>
-              <button
-                onClick={downloadResearchBrief}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
-              >
-                <FileDown className="w-4 h-4" />
-                Download as Markdown
-              </button>
-              <div className="flex-1"></div>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span>Policy research based on verified data</span>
-              </div>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-              <div className="prose prose-slate max-w-none bg-white rounded-lg shadow-sm p-8">
-                <ReactMarkdown
-                  components={{
-                    h1: ({node, ...props}) => <h1 className="text-3xl font-bold mb-6 mt-8 pb-3 border-b-2 border-green-200 text-gray-900" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-2xl font-bold mt-8 mb-4 text-green-900" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-xl font-semibold mt-6 mb-3 text-gray-800" {...props} />,
-                    h4: ({node, ...props}) => <h4 className="text-lg font-semibold mt-4 mb-2 text-gray-700" {...props} />,
-                    p: ({node, ...props}) => <p className="text-gray-700 leading-relaxed mb-4" {...props} />,
-                    ul: ({node, ...props}) => <ul className="list-disc list-inside my-4 space-y-2 ml-4" {...props} />,
-                    ol: ({node, ...props}) => <ol className="list-decimal list-inside my-4 space-y-2 ml-4" {...props} />,
-                    li: ({node, ...props}) => <li className="text-gray-700 leading-relaxed" {...props} />,
-                    strong: ({node, ...props}) => <strong className="font-semibold text-gray-900" {...props} />,
-                    em: ({node, ...props}) => <em className="italic text-gray-800" {...props} />,
-                    code: ({node, inline, ...props}) =>
-                      inline
-                        ? <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm text-gray-800 font-mono" {...props} />
-                        : <code className="block bg-gray-800 text-gray-100 p-4 rounded-lg my-4 overflow-x-auto font-mono text-sm" {...props} />,
-                    pre: ({node, ...props}) => <pre className="bg-gray-800 text-gray-100 p-4 rounded-lg my-4 overflow-x-auto" {...props} />,
-                    hr: ({node, ...props}) => <hr className="my-8 border-t-2 border-gray-300" {...props} />,
-                    blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-green-500 bg-green-50 py-2 px-4 my-4 italic text-gray-700" {...props} />,
-                    a: ({node, ...props}) => <a className="text-green-600 hover:underline" {...props} />,
-                    table: ({node, ...props}) => <table className="min-w-full border-collapse border border-gray-300 my-4" {...props} />,
-                    thead: ({node, ...props}) => <thead className="bg-gray-100" {...props} />,
-                    th: ({node, ...props}) => <th className="border border-gray-300 px-4 py-2 text-left font-semibold" {...props} />,
-                    td: ({node, ...props}) => <td className="border border-gray-300 px-4 py-2" {...props} />,
-                  }}
-                >
-                  {researchBrief}
-                </ReactMarkdown>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                Generated by Democratic Accountability Platform Research AI
-              </div>
-              <button
-                onClick={() => setShowResearchModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Footer */}
       <footer className="bg-white border-t mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center text-2xl">
-                📍
-              </div>
-              <span className="font-bold text-xl text-gray-900">Project Pain Point</span>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Activity className="w-6 h-6 text-blue-600" />
+              <span className="font-bold text-gray-900">Democratic Accountability Platform</span>
             </div>
             <p className="text-gray-600 mb-4">
               Transforming democratic accountability through real-time citizen impact intelligence and professional creative services

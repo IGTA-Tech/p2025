@@ -47,3 +47,6 @@ lerna-debug.log*
 
 # Server Files
 server.log
+
+# Log files
+logs/

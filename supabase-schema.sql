@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS citizen_stories (
     "competitiveVulnerability": "unknown"
   }'::jsonb,
 
+  -- Source reference for auto-generated stories (NULL for user submissions)
+  source_reference JSONB DEFAULT NULL,
+
   -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

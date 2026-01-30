@@ -9,15 +9,14 @@ import { createClient } from '@supabase/supabase-js';
 // Get Supabase credentials from environment variables
 // Support both browser (import.meta.env) and Node.js (process.env)
 function getSupabaseConfig() {
-  // Try process.env first (Node.js), then import.meta.env (Vite/browser)
   const url =
-    (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+    (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) ||
     '';
 
   const key =
-    (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
+    (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) ||
     '';
 
   return { url, key };

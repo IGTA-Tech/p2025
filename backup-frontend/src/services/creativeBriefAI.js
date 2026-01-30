@@ -13,29 +13,19 @@ const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
  * Generate a creative brief prompt for the AI
  */
 function buildCreativeBriefPrompt(story, censusData, verification) {
-  // Safe access to nested properties with defaults
-  const aiAnalysis = story.aiAnalysis || {};
-  const impact = story.impact || {};
-  const messageResonance = aiAnalysis.messageResonance ?? 'N/A';
-  const competitiveVulnerability = aiAnalysis.competitiveVulnerability || 'unknown';
-  const demographicAppeal = aiAnalysis.demographicAppeal?.join(', ') || 'general audience';
-  const affectedPopulation = impact.affected_population?.toLocaleString() || 'N/A';
-  const economicImpact = impact.economic != null ? `$${Math.abs(impact.economic).toLocaleString()}` : 'N/A';
-  const timeframe = impact.timeframe || 'N/A';
-
   return `Generate a complete political campaign creative brief. Output ONLY the brief document - no conversational text, no questions, no stopping. This is automated document generation.
 
 DATA:
 Story: ${story.headline} | ${story.location.city}, ${story.location.state} (${story.location.district}) | ${story.policyArea}
 ${story.story}
 
-Verification: AI ${story.verificationScore}% | Census ${verification?.confidence || 75}% | Resonance ${messageResonance}% | Vulnerability ${competitiveVulnerability}
+Verification: AI ${story.verificationScore}% | Census ${verification?.confidence || 75}% | Resonance ${story.aiAnalysis.messageResonance}% | Vulnerability ${story.aiAnalysis.competitiveVulnerability}
 
-Demographics (ZIP ${story.location.zip}): Pop ${censusData?.population?.total?.toLocaleString() || 'N/A'} | Income $${censusData?.income?.medianHousehold?.toLocaleString() || 'N/A'} | Unemployment ${censusData?.employment?.unemploymentRate || 'N/A'}% | Home Value $${censusData?.housing?.medianValue?.toLocaleString() || 'N/A'}
+Demographics (ZIP ${story.location.zip}): Pop ${censusData?.population.total.toLocaleString() || 'N/A'} | Income $${censusData?.income.medianHousehold.toLocaleString() || 'N/A'} | Unemployment ${censusData?.employment.unemploymentRate || 'N/A'}% | Home Value $${censusData?.housing.medianValue.toLocaleString() || 'N/A'}
 
-Impact: ${affectedPopulation} affected | ${economicImpact} economic | ${timeframe}
+Impact: ${story.impact.affected_population.toLocaleString()} affected | $${Math.abs(story.impact.economic).toLocaleString()} economic | ${story.impact.timeframe}
 
-Target: ${demographicAppeal}
+Target: ${story.aiAnalysis.demographicAppeal.join(', ')}
 
 REQUIREMENTS: Be verbose, insightful, strategic. 2-3 sentences per point. Markdown format. Complete ALL sections.
 
@@ -104,8 +94,9 @@ START NOW: Generate complete brief from "# CREATIVE BRIEF" to final "NEXT STEPS"
  */
 async function generateWithAnthropic(prompt) {
   // Call the backend proxy instead of Anthropic directly (to avoid CORS issues)
-  // Use relative URL so Vite dev server proxies to backend
-  const response = await fetch('/api/generate-creative-brief', {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  const response = await fetch(`${API_URL}/api/generate-creative-brief`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -177,16 +168,6 @@ function generateMockBrief(story, censusData, verification) {
     day: 'numeric'
   });
 
-  // Safe access to nested properties with defaults
-  const aiAnalysis = story.aiAnalysis || {};
-  const impact = story.impact || {};
-  const demographicAppeal = aiAnalysis.demographicAppeal?.join(', ') || 'general audience';
-  const messageResonance = aiAnalysis.messageResonance ?? 'N/A';
-  const competitiveVulnerability = aiAnalysis.competitiveVulnerability || 'unknown';
-  const affectedPopulation = impact.affected_population?.toLocaleString() || 'N/A';
-  const economicImpact = impact.economic != null ? Math.abs(impact.economic / 1000000).toFixed(1) : 'N/A';
-  const timeframe = impact.timeframe || 'recent period';
-
   return `# CREATIVE BRIEF
 
 **Generated:** ${date} | **Story ID:** ${story.id}
@@ -199,35 +180,35 @@ function generateMockBrief(story, censusData, verification) {
 
 **Core Message:** ${story.headline} This verified story demonstrates the real-world impact of federal policy changes on everyday Americans in ${story.location.city}, ${story.location.state}.
 
-**Primary Objective:** Mobilize ${demographicAppeal} by highlighting the tangible consequences of policy decisions on local communities.
+**Primary Objective:** Mobilize ${story.aiAnalysis.demographicAppeal.join(', ')} by highlighting the tangible consequences of policy decisions on local communities.
 
-**Target Audience:** ${demographicAppeal} in ${story.location.district} and similar swing districts.
+**Target Audience:** ${story.aiAnalysis.demographicAppeal.join(', ')} in ${story.location.district} and similar swing districts.
 
 **Verification Status:**
 - AI Verification Score: ${story.verificationScore}%
 - Census Bureau Confidence: ${verification?.confidence || 75}%
-- Message Resonance: ${messageResonance}%
-- Competitive Vulnerability: ${competitiveVulnerability}
+- Message Resonance: ${story.aiAnalysis.messageResonance}%
+- Competitive Vulnerability: ${story.aiAnalysis.competitiveVulnerability}
 
 ---
 
 ## 2. STORY NARRATIVE
 
 **Key Emotional Hook:**
-Real people in ${story.location.city} are experiencing immediate, measurable impacts from federal policy changes. This is not abstract politics - it affects ${affectedPopulation} people in their daily lives.
+Real people in ${story.location.city} are experiencing immediate, measurable impacts from federal policy changes. This is not abstract politics - it affects ${story.impact.affected_population.toLocaleString()} people in their daily lives.
 
 **Most Compelling Details:**
 ${story.story.split('.').slice(0, 3).map(s => `- ${s.trim()}`).join('\n')}
 
 **Before/After Framing:**
 - BEFORE: Stable community services, predictable outcomes
-- AFTER: Disruption within ${timeframe}, ${affectedPopulation} people affected
+- AFTER: Disruption within ${story.impact.timeframe}, ${story.impact.affected_population.toLocaleString()} people affected
 
 **Credibility Elements:**
 - Verified by US Census Bureau (${verification?.confidence || 75}% confidence)
-- Real ZIP code data: ${censusData?.population?.total?.toLocaleString() || '66,000+'} residents
-- Economic impact: $${economicImpact}M
-- Specific timeframe: ${timeframe}
+- Real ZIP code data: ${censusData?.population.total.toLocaleString() || '66,000+'} residents
+- Economic impact: $${Math.abs(story.impact.economic / 1000000).toFixed(1)}M
+- Specific timeframe: ${story.impact.timeframe}
 
 ---
 
@@ -256,7 +237,7 @@ SUPER: Contact information
 
 **Concept 1: "By The Numbers"**
 - Static infographic showing Census data + impact metrics
-- Headline: "${affectedPopulation} Neighbors Affected"
+- Headline: "${story.impact.affected_population.toLocaleString()} Neighbors Affected"
 - 15-second version for Instagram/Facebook Stories
 
 **Concept 2: "Real Stories"**
@@ -267,7 +248,7 @@ SUPER: Contact information
 
 **Concept 3: "Before & After"**
 - Split-screen comparison
-- Show measurable change over ${timeframe}
+- Show measurable change over ${story.impact.timeframe}
 - Shareable carousel format for Instagram
 
 ### Radio Spot (30-second) - **Effectiveness: 7/10**
@@ -276,7 +257,7 @@ SUPER: Contact information
 \`\`\`
 [SFX: Ambient community sounds]
 
-NARRATOR: In ${story.location.city}, ${affectedPopulation} people
+NARRATOR: In ${story.location.city}, ${story.impact.affected_population.toLocaleString()} people
 just experienced something they never expected.
 
 [PAUSE]
@@ -301,7 +282,7 @@ Learn more about how policy affects your community at [website].
 
 **Demographic Profile:**
 - Age: ${story.demographics?.age || '35-55'} ± 10 years (core: 25-55)
-- Income: $${censusData?.income?.medianHousehold?.toLocaleString() || '45,000-75,000'}
+- Income: $${censusData?.income.medianHousehold.toLocaleString() || '45,000-75,000'}
 - Education: ${story.demographics?.education?.replace('_', ' ') || 'High school to college educated'}
 - Party: ${story.demographics?.party || 'Independent'}, swing voters, independents
 
@@ -312,8 +293,8 @@ Learn more about how policy affects your community at [website].
 - Media Consumption: Mix of traditional and digital, Facebook-heavy
 
 **Estimated Reach:**
-- Primary audience: ${impact.affected_population ? Math.floor(impact.affected_population * 3).toLocaleString() : 'N/A'} (3x affected population)
-- Secondary audience: ${impact.affected_population ? Math.floor(impact.affected_population * 10).toLocaleString() : 'N/A'} (similar districts)
+- Primary audience: ${Math.floor(story.impact.affected_population * 3).toLocaleString()} (3x affected population)
+- Secondary audience: ${Math.floor(story.impact.affected_population * 10).toLocaleString()} (similar districts)
 - Total potential impressions: 2.5M - 4M
 
 ---
@@ -518,338 +499,6 @@ export async function generateCreativeBrief(story, censusData, verification, use
   }
 }
 
-/**
- * Build research brief prompt for AI
- */
-function buildResearchBriefPrompt(story, censusData, verification, additionalData = {}) {
-  const aiAnalysis = story.aiAnalysis || {};
-  const impact = story.impact || {};
-  const messageResonance = aiAnalysis.messageResonance ?? 'N/A';
-  const competitiveVulnerability = aiAnalysis.competitiveVulnerability || 'unknown';
-  const affectedPopulation = impact.affected_population?.toLocaleString() || 'N/A';
-  const economicImpact = impact.economic != null ? `$${Math.abs(impact.economic).toLocaleString()}` : 'N/A';
-  const timeframe = impact.timeframe || 'N/A';
-
-  return `Generate a comprehensive policy research brief. Output ONLY the research document - no conversational text, no questions, no stopping. This is automated document generation.
-
-DATA:
-Story: ${story.headline} | ${story.location.city}, ${story.location.state} (${story.location.district}) | ${story.policyArea}
-${story.story}
-
-Verification: AI ${story.verificationScore}% | Census ${verification?.confidence || 75}% | Resonance ${messageResonance}% | Vulnerability ${competitiveVulnerability}
-
-Demographics (ZIP ${story.location.zip}): Pop ${censusData?.population?.total?.toLocaleString() || 'N/A'} | Income $${censusData?.income?.medianHousehold?.toLocaleString() || 'N/A'} | Unemployment ${censusData?.employment?.unemploymentRate || 'N/A'}% | Home Value $${censusData?.housing?.medianValue?.toLocaleString() || 'N/A'}
-
-Impact: ${affectedPopulation} affected | ${economicImpact} economic | ${timeframe}
-
-REQUIREMENTS: Be thorough, factual, policy-focused. Cite data sources. Markdown format. Complete ALL sections.
-
-SECTIONS:
-
-## 1. EXECUTIVE RESEARCH SUMMARY
-- Issue Overview (2-3 sentences)
-- Key Findings (3-5 bullet points)
-- Data Confidence Level: ${story.verificationScore}%
-- Geographic Scope: ${story.location.district}
-
-## 2. POLICY CONTEXT
-### Federal Policy Background
-- Relevant federal programs and funding
-- Recent policy changes affecting this area
-- Regulatory framework
-
-### State/Local Context
-- State-specific policies in ${story.location.state}
-- Local implementation challenges
-- Regional variations
-
-## 3. DATA ANALYSIS
-### Primary Data Sources
-- Census Bureau data verification
-- Federal agency statistics
-- Economic indicators
-
-### Key Metrics
-- Population affected: ${affectedPopulation}
-- Economic impact: ${economicImpact}
-- Timeline: ${timeframe}
-
-### Demographic Breakdown
-- Income distribution analysis
-- Employment patterns
-- Housing market indicators
-
-## 4. IMPACT ASSESSMENT
-### Direct Impacts
-- Immediate effects on constituents
-- Service disruptions
-- Economic consequences
-
-### Indirect Impacts
-- Long-term community effects
-- Ripple effects on related sectors
-- Vulnerable population analysis
-
-### Comparative Analysis
-- Similar situations in other districts
-- Historical precedents
-- National trends
-
-## 5. STAKEHOLDER ANALYSIS
-### Affected Groups
-- Primary stakeholders
-- Secondary stakeholders
-- Opposition stakeholders
-
-### Political Landscape
-- Key decision makers
-- Advocacy organizations
-- Media coverage analysis
-
-## 6. POLICY RECOMMENDATIONS
-### Short-term Actions (0-3 months)
-- Immediate response options
-- Quick wins
-
-### Medium-term Strategies (3-12 months)
-- Policy adjustments
-- Funding opportunities
-
-### Long-term Solutions (1-3 years)
-- Structural changes
-- Legislative options
-
-## 7. RESEARCH METHODOLOGY
-- Data sources used
-- Verification methods
-- Confidence intervals
-- Limitations and caveats
-
-## 8. APPENDIX
-### Data Tables
-- Key statistics summary
-- Source citations
-- Additional resources for follow-up research`;
-}
-
-/**
- * Generate mock research brief (for testing without API keys)
- */
-function generateMockResearchBrief(story, censusData, verification) {
-  const date = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-
-  const aiAnalysis = story.aiAnalysis || {};
-  const impact = story.impact || {};
-  const affectedPopulation = impact.affected_population?.toLocaleString() || 'N/A';
-  const economicImpact = impact.economic != null ? Math.abs(impact.economic / 1000000).toFixed(1) : 'N/A';
-  const timeframe = impact.timeframe || 'recent period';
-
-  return `# POLICY RESEARCH BRIEF
-
-**Generated:** ${date} | **Story ID:** ${story.id} | **Classification:** Research Document
-
----
-
-## 1. EXECUTIVE RESEARCH SUMMARY
-
-**Issue Overview:**
-This research brief examines the reported impacts of federal policy changes on residents in ${story.location.city}, ${story.location.state} (${story.location.district}). The issue falls under the ${story.policyArea} policy area and has been verified with ${story.verificationScore}% confidence.
-
-**Key Findings:**
-- ${affectedPopulation} individuals directly affected in the target area
-- Economic impact estimated at $${economicImpact}M
-- Timeline of impact: ${timeframe}
-- Census verification confidence: ${verification?.confidence || 75}%
-- Story verification score: ${story.verificationScore}%
-
-**Data Confidence Level:** ${story.verificationScore}%
-**Geographic Scope:** ${story.location.district}
-
----
-
-## 2. POLICY CONTEXT
-
-### Federal Policy Background
-The ${story.policyArea} sector has undergone significant changes in recent federal policy cycles. Key programs affecting this area include federal funding allocations, regulatory requirements, and intergovernmental transfer mechanisms.
-
-Recent policy changes have altered the landscape for:
-- Direct federal assistance programs
-- State block grant allocations
-- Regulatory compliance requirements
-
-### State/Local Context
-${story.location.state} has historically maintained specific approaches to ${story.policyArea} policy implementation. The state's regulatory framework interacts with federal policy in ways that can amplify or mitigate impacts at the local level.
-
-Key state-level factors:
-- State matching fund requirements
-- Local implementation flexibility
-- Regional economic conditions in ${story.location.county} County
-
----
-
-## 3. DATA ANALYSIS
-
-### Primary Data Sources
-| Source | Data Type | Confidence |
-|--------|-----------|------------|
-| US Census Bureau | Demographics, Economics | ${verification?.confidence || 75}% |
-| Bureau of Labor Statistics | Employment | High |
-| Federal Reserve | Economic Indicators | High |
-| Local Government Records | Implementation Data | Medium |
-
-### Key Metrics
-- **Population Affected:** ${affectedPopulation}
-- **Economic Impact:** $${economicImpact}M
-- **Timeline:** ${timeframe}
-- **Geographic Area:** ZIP ${story.location.zip}
-
-### Demographic Breakdown
-Based on Census Bureau data for ZIP ${story.location.zip}:
-- Total Population: ${censusData?.population?.total?.toLocaleString() || 'N/A'}
-- Median Household Income: $${censusData?.income?.medianHousehold?.toLocaleString() || 'N/A'}
-- Unemployment Rate: ${censusData?.employment?.unemploymentRate || 'N/A'}%
-- Median Home Value: $${censusData?.housing?.medianValue?.toLocaleString() || 'N/A'}
-
----
-
-## 4. IMPACT ASSESSMENT
-
-### Direct Impacts
-The reported situation indicates immediate effects including:
-- Service disruption or reduction in ${story.policyArea} services
-- Financial burden on affected households
-- Increased demand on alternative resources
-
-### Indirect Impacts
-Secondary effects likely include:
-- Strain on related community services
-- Potential migration or displacement effects
-- Long-term economic productivity impacts
-
-### Comparative Analysis
-Similar patterns have been observed in comparable districts nationwide, particularly in areas with similar demographic profiles and economic conditions.
-
----
-
-## 5. STAKEHOLDER ANALYSIS
-
-### Affected Groups
-**Primary Stakeholders:**
-- Direct service recipients (${affectedPopulation} individuals)
-- Local service providers
-- Municipal/county governments
-
-**Secondary Stakeholders:**
-- State agencies
-- Advocacy organizations
-- Healthcare/education/social service networks
-
-### Political Landscape
-${story.location.district} representatives and ${story.location.state} state legislators have primary jurisdiction over response options. Key committees and advocacy groups are actively monitoring this policy area.
-
----
-
-## 6. POLICY RECOMMENDATIONS
-
-### Short-term Actions (0-3 months)
-1. Document and publicize verified impacts
-2. Engage local stakeholders for coalition building
-3. Request emergency flexibility from relevant agencies
-
-### Medium-term Strategies (3-12 months)
-1. Propose targeted legislative amendments
-2. Seek alternative funding mechanisms
-3. Develop inter-jurisdictional cooperation agreements
-
-### Long-term Solutions (1-3 years)
-1. Structural policy reform advocacy
-2. Permanent funding stream establishment
-3. Regulatory framework modernization
-
----
-
-## 7. RESEARCH METHODOLOGY
-
-**Data Sources:**
-- US Census Bureau American Community Survey (5-year estimates)
-- Federal agency administrative data
-- Citizen-submitted testimony (verified)
-
-**Verification Methods:**
-- Cross-reference with federal datasets
-- Geographic and demographic consistency checks
-- Timeline plausibility analysis
-
-**Confidence Level:** ${story.verificationScore}%
-
-**Limitations:**
-- Self-reported citizen data requires additional verification
-- Some federal data may have reporting lag
-- Local variations may not be fully captured
-
----
-
-## 8. APPENDIX
-
-### Data Summary Table
-| Metric | Value | Source |
-|--------|-------|--------|
-| Affected Population | ${affectedPopulation} | Story + Census |
-| Economic Impact | $${economicImpact}M | Estimated |
-| Verification Score | ${story.verificationScore}% | AI Analysis |
-| Census Confidence | ${verification?.confidence || 75}% | Census Bureau |
-| Timeline | ${timeframe} | Reported |
-
-### Additional Resources
-- Census Bureau QuickFacts: ${story.location.state}
-- ${story.policyArea} policy tracking databases
-- Congressional Research Service reports
-
----
-
-*This research brief was generated automatically based on verified citizen testimony and federal data sources. For additional research or clarification, please contact the research team.*
-`;
-}
-
-/**
- * Generate a research brief using AI
- * @param {Object} story - The citizen story
- * @param {Object} censusData - Census data for the story's location
- * @param {Object} verification - Census verification results
- * @param {boolean} useMock - Use mock data instead of real AI
- * @returns {Promise<string>} The generated research brief in markdown format
- */
-export async function generateResearchBrief(story, censusData, verification, useMock = false) {
-  try {
-    if (useMock || (!ANTHROPIC_API_KEY && !OPENAI_API_KEY)) {
-      console.log('Using mock research brief generator');
-      return generateMockResearchBrief(story, censusData, verification);
-    }
-
-    const prompt = buildResearchBriefPrompt(story, censusData, verification);
-
-    let briefContent;
-    if (AI_PROVIDER === 'anthropic') {
-      briefContent = await generateWithAnthropic(prompt);
-    } else if (AI_PROVIDER === 'openai') {
-      briefContent = await generateWithOpenAI(prompt);
-    } else {
-      throw new Error(`Unknown AI provider: ${AI_PROVIDER}`);
-    }
-
-    return briefContent;
-  } catch (error) {
-    console.error('Error generating research brief:', error);
-    console.log('Falling back to mock research brief due to error');
-    return generateMockResearchBrief(story, censusData, verification);
-  }
-}
-
 export default {
   generateCreativeBrief,
-  generateResearchBrief,
 };
